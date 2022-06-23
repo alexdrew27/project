@@ -1,4 +1,3 @@
-#include "pitches.h"
 #include "song.h"
 #include "defs.h"
 #include "DHT.h"
@@ -9,11 +8,17 @@ DHT dht;
 RTC_DS3231 rtc;
 MCUFRIEND_kbv tft;
 
+bool alarmScreen = false;
+
 void setup () 
 {
   Serial.begin(9600);
   pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(ALARM_BUTTON, INPUT);
+
   digitalWrite(BUZZER_PIN, HIGH);
+  
   dht.setup(DHT_PIN);
   
   if (! rtc.begin()) {
@@ -39,36 +44,43 @@ void loop ()
   const unsigned long interval = 1000;
   if(currTime - prevTime >= interval) {
     prevTime += interval;
+    readButtons();
     //playSong();
     if(rtc.now().second() == 0) 
     {
-      readTempHumid();
       drawScreen();
     }
   }
+  readButtons();
 }
 
-void readTempHumid() {
-  float humidity = dht.getHumidity();
-  float temperature = dht.getTemperature();
-  DateTime now = rtc.now();
-  Serial.print(now.year(), DEC);
-  Serial.print('/');
-  Serial.print(now.month(), DEC);
-  Serial.print('/');
-  Serial.print(now.day(), DEC);
-  Serial.print(" ");
-  Serial.print(now.hour(), DEC);
-  Serial.print(':');
-  Serial.print(now.minute(), DEC);
-  Serial.print(':');
-  Serial.print(now.second(), DEC);
-  Serial.print(" ");
-  Serial.print(humidity, 1);
-  Serial.print("%");
-  Serial.print(" ");
-  Serial.print(temperature, 1);
-  Serial.println("C");
+void readButtons() {
+  static byte alarm_prev_state;
+  //static byte cancel_prev_state;
+  //static byte min10_prev_state;
+  //static byte min_prev_state;
+  
+  byte alarm_state = digitalRead(ALARM_BUTTON);
+  //byte cancel_state = digitalRead(CANCEL);
+  //byte min10_state = digitalRead(MIN10);
+  //byte min_state = digitalRead(MIN);
+
+  if(alarm_state && !alarm_prev_state && !alarmScreen) {
+    Serial.println("Going to alarm screen");
+    alarmScreen = true;
+    drawAlarmScreen();
+  }
+
+  if(alarm_state && !alarm_prev_state && alarmScreen) {
+    Serial.println("Going back to main screen");
+    alarmScreen = false;
+    drawScreen();
+  }
+  
+  alarm_prev_state = alarm_state;
+  //min_prev_state = min_state;
+  //sec10_prev_state = sec10_state;
+  //start_prev_state = start_state;
 }
 
 String getTime() {
@@ -104,10 +116,13 @@ void drawScreen() {
 }
 
 void drawTemperature() {
+  float temp = getTemp();
+  if(temp > 25)
+    digitalWrite(RED_LED, HIGH);
   tft.setTextSize(2);
   tft.setTextColor(WHITE);
   tft.setCursor(415, 10);
-  tft.print(getTemp(), 1);
+  tft.print(temp, 1);
   tft.print("C");
 }
 
@@ -132,4 +147,22 @@ void drawTime() {
   tft.setTextColor(WHITE);
   tft.setCursor(150, 130);
   tft.print(getTime());
+}
+
+void drawAlarmScreen() {
+  tft.setRotation(1);
+  int width = tft.width();
+  int height = tft.height();
+  tft.fillScreen(BLACK);
+  tft.drawRect(0, 0, width, height, WHITE);
+  tft.setTextSize(5);
+  tft.setTextColor(WHITE);
+  tft.setCursor(150, 130);
+  tft.print("00:00");
+  tft.setTextSize(5);
+  tft.setTextColor(WHITE);
+  tft.setCursor(120, 70);
+  tft.print("Alarm set");
+  Serial.println("Alarm set");
+  delay(5000);
 }
